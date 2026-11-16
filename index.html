@@ -1341,7 +1341,7 @@ I am enclosing the prescribed RTI fee of ₹10 (BPL exempt). Kindly respond with
     }
 
     async function callLiveGeminiApi(query) {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
       const systemPrompt = `You are FetchAI ("Zero Redirects. Instant File & Civic Retrieval."). Answer concisely and directly for an Indian citizen or student. Provide actionable steps, official Indian government portals (india.gov.in, myscheme.gov.in, udgam.rbi.org.in, udiseplus.gov.in, scholarships.gov.in, rtionline.gov.in, pgportal.gov.in, digilocker.gov.in), and direct exam/scheme guidance. Language preference: ${currentLang}.`;
 
       const response = await fetch(endpoint, {
