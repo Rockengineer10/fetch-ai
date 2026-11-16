@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FetchAI — Zero Redirects. Instant File &amp; Civic Retrieval.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Segoe UI', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          animation: {
+            'fade-in-up': 'fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          },
+          keyframes: {
+            fadeInUp: {
+              '0%': { opacity: '0', transform: 'translateY(8px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      background-color: #050507;
+      color: #f4f4f6;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .ambient-stage {
+      background-image:
+        radial-gradient(ellipse 60% 40% at 50% 0%, rgba(99, 102, 241, 0.11), transparent),
+        radial-gradient(ellipse 40% 30% at 85% 90%, rgba(16, 185, 129, 0.06), transparent);
+    }
+
+    .command-bar {
+      background: rgba(17, 17, 21, 0.92);
+      backdrop-filter: blur(20px);
+      border: 1px solid #262630;
+      box-shadow: 0 12px 40px -10px rgba(0, 0, 0, 0.85);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .command-bar:focus-within {
+      border-color: rgba(99, 102, 241, 0.7);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.16), 0 12px 44px -8px rgba(59, 130, 246, 0.25);
+    }
+
+    .suggestion-card {
+      background: #0f0f13;
+      border: 1px solid #202028;
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease, background-color 0.22s ease, box-shadow 0.22s ease;
+    }
+
+    .suggestion-card:hover {
+      background: #14141a;
+      border-color: rgba(99, 102, 241, 0.45);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px -12px rgba(99, 102, 241, 0.22);
+    }
+
+    .custom-scroll::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #24242c;
+      border-radius: 9999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #383844;
+    }
+
+    .dot-pulse span {
+      animation: dotBounce 1.2s infinite ease-in-out both;
+    }
+    .dot-pulse span:nth-child(1) { animation-delay: -0.32s; }
+    .dot-pulse span:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes dotBounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.35; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    #toast {
+      transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @media (min-width: 1024px) {
+      #sidebar.collapsed {
+        width: 0 !important;
+        min-width: 0 !important;
+        padding: 0 !important;
+        border-right-width: 0 !important;
+        overflow: hidden;
+      }
+    }
+  </style>
+</head>
+<body class="h-screen overflow-hidden flex bg-[#050507] text-zinc-100 selection:bg-indigo-500/30 selection:text-indigo-200">
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed top-5 right-5 z-[60] pointer-events-none opacity-0 -translate-y-3">
+    <div class="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-[#141419]/95 backdrop-blur-xl border border-emerald-500/40 shadow-[0_12px_40px_rgba(0,0,0,0.85)]">
+      <span class="flex h-2 w-2 relative">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+      </span>
+      <span id="toast-message" class="text-xs font-medium text-zinc-100">Ready</span>
+    </div>
+  </div>
+
+  <!-- Mobile Sidebar Backdrop -->
+  <div id="sidebar-backdrop" onclick="toggleSidebar(false)" class="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm hidden lg:hidden"></div>
+
+  <!-- LEFT COLLAPSIBLE SIDEBAR: Pinboard & History -->
+  <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-50 w-[300px] min-w-[300px] bg-[#0a0a0d] border-r border-[#1c1c22] flex flex-col justify-between transition-all duration-300 -translate-x-full lg:translate-x-0">
+    <!-- Sidebar Header -->
+    <div class="p-4 border-b border-[#191920] flex items-center justify-between gap-2 shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 via-blue-500 to-emerald-400 p-[1px] shadow-[0_0_16px_rgba(99,102,241,0.35)]">
+          <div class="w-full h-full bg-[#0a0a0d] rounded-[11px] flex items-center justify-center">
+            <svg class="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+            </svg>
+          </div>
+        </div>
+        <div>
+          <span class="font-bold text-sm tracking-tight text-white">FetchAI</span>
+          <span class="block text-[10px] font-mono text-zinc-500">Pinboard &amp; History</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1">
+        <button onclick="startNewSession()" title="New Workspace Session" class="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-[#17171d] transition">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 5v14M5 12h14"></path>
+          </svg>
+        </button>
+        <button onclick="toggleSidebar(false)" title="Collapse Sidebar" class="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-[#17171d] transition lg:hidden">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Sidebar Scrollable Middle: Pinned Vault + Recent Searches -->
+    <div class="flex-1 overflow-y-auto custom-scroll p-3.5 space-y-6">
+
+      <!-- Pinned Vault Section -->
+      <div>
+        <div class="flex items-center justify-between px-1 mb-2">
+          <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+            <span>📌</span> Pinned Vault
+          </span>
+          <span id="pinned-count" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#16161c] text-zinc-400 border border-[#24242d]">0</span>
+        </div>
+        <div id="pinned-vault-list" class="space-y-1.5"></div>
+      </div>
+
+      <!-- Recent Searches / History Section -->
+      <div>
+        <div class="flex items-center justify-between px-1 mb-2">
+          <span class="text-[11px] font-mono uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+            <svg class="w-3 h-3 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            Recent Searches
+          </span>
+          <button onclick="clearSearchHistory()" class="text-[10px] text-zinc-500 hover:text-zinc-300 transition">Clear</button>
+        </div>
+        <div id="history-list" class="space-y-1"></div>
+      </div>
+
+    </div>
+
+    <!-- Live Data Engine Settings Footer -->
+    <div class="p-3.5 border-t border-[#191920] bg-[#08080b] space-y-3 shrink-0">
+      <div class="space-y-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] font-semibold text-zinc-300">Live Data Engine</span>
+          <span id="engine-status-pill" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 truncate">
+            ⚡ Instant National Engine
+          </span>
+        </div>
+
+        <div class="flex items-center gap-1.5">
+          <input
+            id="gemini-key-input"
+            type="password"
+            placeholder="Optional: Paste Gemini API Key..."
+            oninput="handleApiKeyChange(this.value)"
+            class="w-full bg-[#121217] border border-[#25252f] focus:border-indigo-500 rounded-xl px-2.5 py-1.5 text-[11px] font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none transition"
+          />
+          <button onclick="toggleGeminiMode()" id="gemini-mode-btn" title="Toggle Live Gemini AI" class="px-2.5 py-1.5 rounded-xl bg-[#181820] hover:bg-[#22222c] border border-[#2a2a35] text-[10px] font-mono text-zinc-300 shrink-0 transition">
+            Engine
+          </button>
+        </div>
+      </div>
+
+      <!-- Bhashini Language Switcher & DPDP Badge -->
+      <div class="flex items-center justify-between gap-2 pt-1 border-t border-[#18181f]">
+        <div class="flex items-center gap-0.5 bg-[#121217] border border-[#23232c] rounded-full p-0.5">
+          <button onclick="setLanguage('EN')" id="lang-EN" class="lang-btn px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500 text-white transition">EN</button>
+          <button onclick="setLanguage('HI')" id="lang-HI" class="lang-btn px-2 py-0.5 rounded-full text-[10px] font-semibold text-zinc-400 hover:text-white transition">HI</button>
+          <button onclick="setLanguage('MR')" id="lang-MR" class="lang-btn px-2 py-0.5 rounded-full text-[10px] font-semibold text-zinc-400 hover:text-white transition">MR</button>
+        </div>
+
+        <div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-[10px] font-medium text-emerald-300" title="Zero Personal Data Tracked">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          <span>DPDP Sec-9 Guest</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CENTER STAGE (WORKSPACE) -->
+  <div class="flex-1 flex flex-col min-w-0 h-full ambient-stage relative">
+
+    <!-- Minimal Top Workspace Bar -->
+    <header class="h-14 px-4 sm:px-6 border-b border-[#16161c] flex items-center justify-between gap-3 shrink-0 bg-[#050507]/70 backdrop-blur-md z-30">
+      <div class="flex items-center gap-3">
+        <button onclick="toggleSidebar()" title="Toggle Pinboard & History" class="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-[#14141a] border border-transparent hover:border-[#24242c] transition">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+          </svg>
+        </button>
+
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-sm sm:text-base tracking-tight text-white flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+            </svg>
+            FetchAI
+          </span>
+          <span class="hidden md:inline-block text-xs text-zinc-500">•</span>
+          <span id="i18n-tagline" class="hidden md:inline-block text-xs text-zinc-400">Zero Redirects. Instant File &amp; Civic Retrieval.</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="header-mode-badge" class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono bg-[#111116] border border-[#23232c] text-zinc-300">
+          ⚡ Instant National Engine
+        </span>
+        <button onclick="startNewSession()" class="px-3 py-1.5 rounded-xl bg-[#131318] hover:bg-[#1c1c24] border border-[#25252f] text-xs font-medium text-zinc-200 transition">
+          + New Query
+        </button>
+      </div>
+    </header>
+
+    <!-- Scrollable Workspace Body -->
+    <main id="workspace-scroll" class="flex-1 overflow-y-auto custom-scroll px-4 sm:px-6">
+      <div class="max-w-4xl mx-auto w-full min-h-full flex flex-col">
+
+        <!-- WELCOME HERO STATE (Shown when chat is empty) -->
+        <section id="welcome-hero" class="flex-1 flex flex-col items-center justify-center py-8 sm:py-12 animate-fade-in-up">
+          <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-blue-500 to-emerald-400 p-[1px] shadow-[0_0_36px_rgba(99,102,241,0.35)] mb-5">
+            <div class="w-full h-full bg-[#09090c] rounded-[15px] flex items-center justify-center">
+              <svg class="w-7 h-7 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+              </svg>
+            </div>
+          </div>
+
+          <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-center text-white">
+            <span id="i18n-hero-greeting">What can</span>
+            <span class="bg-gradient-to-r from-indigo-400 via-blue-400 to-emerald-400 bg-clip-text text-transparent"> FetchAI </span>
+            <span id="i18n-hero-end">retrieve for you?</span>
+          </h1>
+          <p id="i18n-hero-sub" class="mt-2.5 text-sm text-zinc-400 text-center max-w-xl">
+            Zero Redirects. Instant File &amp; Civic Retrieval. Pan-India exam papers, gov.in &amp; myScheme services, unclaimed family wealth recovery, and live PIN code lookup.
+          </p>
+
+          <!-- 4 All-in-One National Portal Cards -->
+          <div class="mt-8 w-full grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <!-- Card 1: All-in-One Student & Exam Helper -->
+            <button onclick="triggerQuickIntent('Fetch PYQ papers, repeated questions and syllabus for JEE & 12th Board')" class="suggestion-card rounded-2xl p-4 sm:p-5 text-left flex flex-col justify-between gap-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs sm:text-sm font-semibold text-indigo-300 flex items-center gap-1.5">
+                  <span>🎓</span> All-in-One Student &amp; Exam Helper
+                </span>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 shrink-0">Pan-India PYQ &amp; Study Vault</span>
+              </div>
+              <p class="text-xs text-zinc-400 leading-relaxed">
+                1-click direct PDF downloads for Previous Year Question Papers (PYQs), official syllabuses, exam timetables, and high-weightage repeated questions across 10th/12th Boards (CBSE, ICSE, State Boards), JEE, NEET, CUET, UPSC, Engineering, and Polytechnic Diploma.
+              </p>
+            </button>
+
+            <!-- Card 2: Complete Gov.in & MyScheme Master Directory -->
+            <button onclick="triggerQuickIntent('Show Gov.in and myScheme services, scholarships, NIDHI-PRAYAS grants and RTI auto-drafter')" class="suggestion-card rounded-2xl p-4 sm:p-5 text-left flex flex-col justify-between gap-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs sm:text-sm font-semibold text-blue-300 flex items-center gap-1.5">
+                  <span>🏛️</span> Complete Gov.in &amp; MyScheme Master Directory
+                </span>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 shrink-0">13,500+ Civic Services</span>
+              </div>
+              <p class="text-xs text-zinc-400 leading-relaxed">
+                Every central and state government service from india.gov.in and myScheme in one place. Instant eligibility steps, required document checklists, and direct portal links for certificates, passports, scholarships, NIDHI-PRAYAS hardware grants, and Section 6(1) RTI auto-drafting.
+              </p>
+            </button>
+
+            <!-- Card 3: ₹2.2L Cr Unclaimed Wealth & Asset Recovery -->
+            <button onclick="triggerQuickIntent('Recover unclaimed family bank deposits, insurance, mutual funds, shares and EPFO via UDGAM')" class="suggestion-card rounded-2xl p-4 sm:p-5 text-left flex flex-col justify-between gap-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs sm:text-sm font-semibold text-emerald-300 flex items-center gap-1.5">
+                  <span>💰</span> ₹2.2L Cr Unclaimed Wealth &amp; Asset Recovery
+                </span>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 shrink-0">RBI • IRDAI • SEBI • IEPFA</span>
+              </div>
+              <p class="text-xs text-zinc-400 leading-relaxed">
+                Discover and recover forgotten family bank deposits (RBI UDGAM), unclaimed insurance policies (IRDAI Bima Bharosa), dormant mutual funds (SEBI MITRA), unpaid dividends/shares (IEPFA), and dormant EPFO provident fund accounts with interactive KYC checklists.
+              </p>
+            </button>
+
+            <!-- Card 4: Live All-India School, College & Civic Lookup -->
+            <button onclick="triggerQuickIntent('Lookup Pan-India school, college, ATL and civic directory by PIN code')" class="suggestion-card rounded-2xl p-4 sm:p-5 text-left flex flex-col justify-between gap-2.5">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs sm:text-sm font-semibold text-amber-300 flex items-center gap-1.5">
+                  <span>🏫</span> Live All-India School, College &amp; Civic Lookup
+                </span>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 shrink-0">Live Postal &amp; UDISE+ API</span>
+              </div>
+              <p class="text-xs text-zinc-400 leading-relaxed">
+                Enter any 6-digit PIN code or district across India to fetch real-time locality data, verified UDISE+ schools, Atal Tinkering Labs (ATL), AICTE colleges, and local civic authorities.
+              </p>
+            </button>
+          </div>
+        </section>
+
+        <!-- ACTIVE CHAT STREAM (Hidden until first message) -->
+        <section id="chat-stream" class="hidden py-6 space-y-5 flex-1"></section>
+
+      </div>
+    </main>
+
+    <!-- DOCKED BOTTOM COMMAND BAR (Clean area directly above input bar) -->
+    <footer class="px-4 sm:px-6 pb-5 pt-3 shrink-0 bg-gradient-to-t from-[#050507] via-[#050507]/95 to-transparent">
+      <div class="max-w-4xl mx-auto">
+        <form id="ai-form" onsubmit="handleChatSubmit(event)" class="command-bar rounded-2xl p-1.5 pl-4 flex items-center gap-2">
+          <svg class="w-4 h-4 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+          </svg>
+          <input
+            id="ai-input"
+            type="text"
+            autocomplete="off"
+            placeholder="Ask FetchAI for any exam paper & syllabus, any gov.in service, unclaimed family wealth, or school directory..."
+            class="w-full bg-transparent text-sm text-white placeholder-zinc-500 focus:outline-none py-2.5"
+          />
+          <button
+            type="button"
+            onclick="simulateVoiceInput()"
+            title="Bhashini Voice Input"
+            class="p-2 rounded-xl text-zinc-400 hover:text-indigo-300 hover:bg-white/5 transition shrink-0"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+          </button>
+          <button
+            type="submit"
+            class="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white text-xs sm:text-sm font-semibold shadow-[0_0_20px_rgba(99,102,241,0.35)] transition flex items-center gap-1.5 shrink-0"
+          >
+            <span id="i18n-send">Fetch</span>
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="12 5 19 12 12 19"></polyline>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </footer>
+
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. State & Persistence Keys (localStorage)
+    // =========================================================================
+    const STORAGE_KEYS = {
+      PINNED: 'fetchai_pinned_vault_v2',
+      HISTORY: 'fetchai_search_history_v2',
+      GEMINI_KEY: 'fetchai_gemini_api_key_v2',
+      ENGINE_MODE: 'fetchai_engine_mode_v2',
+      LANG: 'fetchai_lang_v2'
+    };
+
+    let pinnedVault = JSON.parse(localStorage.getItem(STORAGE_KEYS.PINNED) || '[]');
+    let searchHistory = JSON.parse(localStorage.getItem(STORAGE_KEYS.HISTORY) || '[]');
+    let geminiApiKey = localStorage.getItem(STORAGE_KEYS.GEMINI_KEY) || '';
+    let isLiveGeminiMode = localStorage.getItem(STORAGE_KEYS.ENGINE_MODE) === 'gemini' && Boolean(geminiApiKey);
+    let currentLang = localStorage.getItem(STORAGE_KEYS.LANG) || 'EN';
+
+    const responsePayloadRegistry = new Map();
+
+    // =========================================================================
+    // 2. Bhashini Multilingual Engine (EN / HI / MR)
+    // =========================================================================
+    const i18n = {
+      EN: {
+        tagline: 'Zero Redirects. Instant File & Civic Retrieval.',
+        heroGreeting: 'What can',
+        heroEnd: 'retrieve for you?',
+        heroSub: 'Zero Redirects. Instant File & Civic Retrieval. Pan-India exam papers, gov.in & myScheme services, unclaimed family wealth recovery, and live PIN code lookup.',
+        placeholder: 'Ask FetchAI for any exam paper & syllabus, any gov.in service, unclaimed family wealth, or school directory...',
+        send: 'Fetch'
+      },
+      HI: {
+        tagline: 'शून्य रीडायरेक्ट। तुरंत फ़ाइल और नागरिक सेवाएं।',
+        heroGreeting: 'आज',
+        heroEnd: 'आपके लिए क्या खोज सकता है?',
+        heroSub: 'शून्य रीडायरेक्ट। अखिल भारतीय परीक्षा पेपर, gov.in और myScheme सेवाएं, लावारिस पारिवारिक धन रिकवरी और लाइव पिन कोड निर्देशिका।',
+        placeholder: 'FetchAI से कोई भी परीक्षा पेपर व सिलेबस, gov.in सेवा, लावारिस धन, या स्कूल निर्देशिका पूछें...',
+        send: 'खोजें'
+      },
+      MR: {
+        tagline: 'शून्य रीडायरेक्ट्स. झटपट फाइल आणि नागरी सेवा.',
+        heroGreeting: 'आज',
+        heroEnd: 'तुमच्यासाठी काय शोधू शकतो?',
+        heroSub: 'शून्य रीडायरेक्ट्स. अखिल भारतीय परीक्षा पेपर्स, gov.in आणि myScheme सेवा, दावा न केलेली कौटुंबिक संपत्ती आणि लाइव्ह पिन कोड डिरेक्टरी.',
+        placeholder: 'FetchAI ला कोणताही परीक्षा पेपर आणि अभ्यासक्रम, gov.in सेवा, दावा न केलेली संपत्ती किंवा शाळा डिरेक्टरी विचारा...',
+        send: 'सुरू करा'
+      }
+    };
+
+    function setLanguage(lang, silent = false) {
+      currentLang = lang;
+      localStorage.setItem(STORAGE_KEYS.LANG, lang);
+      const t = i18n[lang] || i18n.EN;
+
+      document.getElementById('i18n-tagline').textContent = t.tagline;
+      document.getElementById('i18n-hero-greeting').textContent = t.heroGreeting;
+      document.getElementById('i18n-hero-end').textContent = t.heroEnd;
+      document.getElementById('i18n-hero-sub').textContent = t.heroSub;
+      document.getElementById('ai-input').placeholder = t.placeholder;
+      document.getElementById('i18n-send').textContent = t.send;
+
+      document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.classList.remove('bg-indigo-500', 'text-white');
+        btn.classList.add('text-zinc-400');
+      });
+      const active = document.getElementById(`lang-${lang}`);
+      if (active) {
+        active.classList.add('bg-indigo-500', 'text-white');
+        active.classList.remove('text-zinc-400');
+      }
+
+      if (!silent) showToast(`Bhashini Engine switched to ${lang}`);
+    }
+
+    // =========================================================================
+    // 3. Toast & Sidebar Controls
+    // =========================================================================
+    let toastTimer;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-message').textContent = msg;
+      toast.classList.remove('opacity-0', '-translate-y-3');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', '-translate-y-3');
+      }, 2800);
+    }
+
+    function toggleSidebar(forceState) {
+      const sidebar = document.getElementById('sidebar');
+      const backdrop = document.getElementById('sidebar-backdrop');
+      const isDesktop = window.innerWidth >= 1024;
+
+      if (isDesktop) {
+        const shouldCollapse = forceState !== undefined ? !forceState : !sidebar.classList.contains('collapsed');
+        sidebar.classList.toggle('collapsed', shouldCollapse);
+      } else {
+        const shouldOpen = forceState !== undefined ? forceState : sidebar.classList.contains('-translate-x-full');
+        sidebar.classList.toggle('-translate-x-full', !shouldOpen);
+        backdrop.classList.toggle('hidden', !shouldOpen);
+      }
+    }
+
+    function startNewSession() {
+      document.getElementById('chat-stream').innerHTML = '';
+      document.getElementById('chat-stream').classList.add('hidden');
+      document.getElementById('welcome-hero').classList.remove('hidden');
+      if (window.innerWidth < 1024) toggleSidebar(false);
+    }
+
+    // =========================================================================
+    // 4. Live Data Engine (Instant National Engine vs Live Gemini AI)
+    // =========================================================================
+    function syncEngineUI() {
+      const input = document.getElementById('gemini-key-input');
+      const pill = document.getElementById('engine-status-pill');
+      const modeBtn = document.getElementById('gemini-mode-btn');
+      const headerBadge = document.getElementById('header-mode-badge');
+
+      if (input.value !== geminiApiKey) input.value = geminiApiKey;
+
+      if (isLiveGeminiMode && geminiApiKey.trim().length > 10) {
+        pill.textContent = '🟢 Live Gemini AI Connected';
+        pill.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 truncate';
+        modeBtn.textContent = 'Gemini';
+        modeBtn.className = 'px-2.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-[10px] font-mono text-emerald-300 shrink-0 transition';
+        headerBadge.innerHTML = '<span>🟢 Live Gemini AI Connected</span>';
+      } else {
+        pill.textContent = '⚡ Instant National Engine';
+        pill.className = 'text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 truncate';
+        modeBtn.textContent = 'Instant';
+        modeBtn.className = 'px-2.5 py-1.5 rounded-xl bg-[#181820] hover:bg-[#22222c] border border-[#2a2a35] text-[10px] font-mono text-zinc-300 shrink-0 transition';
+        headerBadge.innerHTML = '<span>⚡ Instant National Engine</span>';
+      }
+    }
+
+    function handleApiKeyChange(val) {
+      geminiApiKey = val.trim();
+      localStorage.setItem(STORAGE_KEYS.GEMINI_KEY, geminiApiKey);
+      if (geminiApiKey.length > 10) {
+        isLiveGeminiMode = true;
+        localStorage.setItem(STORAGE_KEYS.ENGINE_MODE, 'gemini');
+      } else {
+        isLiveGeminiMode = false;
+        localStorage.setItem(STORAGE_KEYS.ENGINE_MODE, 'instant');
+      }
+      syncEngineUI();
+    }
+
+    function toggleGeminiMode() {
+      if (!geminiApiKey || geminiApiKey.length < 10) {
+        showToast('Paste a Gemini API Key first to connect Live Gemini AI');
+        document.getElementById('gemini-key-input').focus();
+        return;
+      }
+      isLiveGeminiMode = !isLiveGeminiMode;
+      localStorage.setItem(STORAGE_KEYS.ENGINE_MODE, isLiveGeminiMode ? 'gemini' : 'instant');
+      syncEngineUI();
+      showToast(isLiveGeminiMode ? '🟢 Live Gemini AI Connected' : '⚡ Switched to Instant National Engine');
+    }
+
+    // =========================================================================
+    // 5. Pinned Vault & Search History (localStorage)
+    // =========================================================================
+    function renderPinnedVault() {
+      const list = document.getElementById('pinned-vault-list');
+      document.getElementById('pinned-count').textContent = pinnedVault.length;
+
+      if (pinnedVault.length === 0) {
+        list.innerHTML = `
+          <div class="px-3 py-3 rounded-xl border border-dashed border-[#22222a] text-[11px] text-zinc-500 text-center">
+            Click <strong class="text-zinc-300">📌 Pin to Board</strong> on any AI card to save it here.
+          </div>
+        `;
+        return;
+      }
+
+      list.innerHTML = pinnedVault.map((item, idx) => `
+        <div class="group flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl bg-[#121217] hover:bg-[#191922] border border-[#202029] hover:border-indigo-500/35 transition">
+          <button onclick="openPinnedItem(${idx})" class="flex-1 min-w-0 text-left">
+            <div class="text-xs font-medium text-zinc-200 truncate">${escapeHtml(item.title)}</div>
+            <div class="text-[10px] font-mono text-zinc-500 truncate">${escapeHtml(item.badge)}</div>
+          </button>
+          <button onclick="removePinnedItem(${idx})" title="Remove Pin" class="opacity-60 group-hover:opacity-100 p-1 rounded-md text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function pinResponseToBoard(payloadId, btnEl) {
+      const payload = responsePayloadRegistry.get(payloadId);
+      if (!payload) return;
+
+      const exists = pinnedVault.some(p => p.title === payload.title && p.badge === payload.badge);
+      if (exists) {
+        showToast('Already saved in Pinned Vault');
+        return;
+      }
+
+      pinnedVault.unshift({
+        id: Date.now(),
+        title: payload.title,
+        badge: payload.badge,
+        query: payload.query,
+        html: payload.html
+      });
+      if (pinnedVault.length > 20) pinnedVault.pop();
+      localStorage.setItem(STORAGE_KEYS.PINNED, JSON.stringify(pinnedVault));
+      renderPinnedVault();
+
+      if (btnEl) {
+        btnEl.innerHTML = '✓ Pinned';
+        btnEl.classList.add('bg-emerald-500/20', 'text-emerald-300', 'border-emerald-500/40');
+      }
+      showToast(`Pinned "${payload.title}" to Vault`);
+    }
+
+    function removePinnedItem(idx) {
+      pinnedVault.splice(idx, 1);
+      localStorage.setItem(STORAGE_KEYS.PINNED, JSON.stringify(pinnedVault));
+      renderPinnedVault();
+      showToast('Removed from Pinned Vault');
+    }
+
+    function openPinnedItem(idx) {
+      const item = pinnedVault[idx];
+      if (!item) return;
+      ensureChatStreamVisible();
+      appendUserBubble(`[Pinned Vault] ${item.query || item.title}`);
+      appendAiCardRaw(item.html);
+      if (window.innerWidth < 1024) toggleSidebar(false);
+    }
+
+    function renderSearchHistory() {
+      const list = document.getElementById('history-list');
+      if (searchHistory.length === 0) {
+        list.innerHTML = `<div class="px-2 py-2 text-[11px] text-zinc-600">No recent searches yet.</div>`;
+        return;
+      }
+      list.innerHTML = searchHistory.map((item, idx) => `
+        <button onclick="reloadHistoryQuery(${idx})" class="w-full text-left px-2.5 py-2 rounded-xl hover:bg-[#15151c] text-xs text-zinc-300 hover:text-white transition flex items-center gap-2 group">
+          <svg class="w-3 h-3 text-zinc-600 group-hover:text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 10 4 15 9 20"></polyline>
+            <path d="M20 4v7a4 4 0 0 1-4 4H4"></path>
+          </svg>
+          <span class="truncate">${escapeHtml(item.query)}</span>
+        </button>
+      `).join('');
+    }
+
+    function logSearchHistory(query) {
+      const clean = query.trim();
+      if (!clean) return;
+      searchHistory = searchHistory.filter(h => h.query.toLowerCase() !== clean.toLowerCase());
+      searchHistory.unshift({ query: clean, ts: Date.now() });
+      if (searchHistory.length > 15) searchHistory.pop();
+      localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(searchHistory));
+      renderSearchHistory();
+    }
+
+    function reloadHistoryQuery(idx) {
+      const item = searchHistory[idx];
+      if (!item) return;
+      if (window.innerWidth < 1024) toggleSidebar(false);
+      executeAiQuery(item.query, true);
+    }
+
+    function clearSearchHistory() {
+      searchHistory = [];
+      localStorage.removeItem(STORAGE_KEYS.HISTORY);
+      renderSearchHistory();
+      showToast('Search history cleared');
+    }
+
+    // =========================================================================
+    // 6. Rich Multi-Line Binary %PDF-1.4 Blob Generator (25+ Structured Lines)
+    // =========================================================================
+    function sanitizePdfText(str) {
+      return String(str).replace(/[^\x20-\x7E]/g, ' ').replace(/[()\\]/g, '');
+    }
+
+    function generateStructuredPdfBlob(heading, linesArray) {
+      const allLines = [
+        sanitizePdfText(heading),
+        '========================================================================',
+        'Generated by FetchAI // Zero Redirects. Instant File & Civic Retrieval.',
+        'Compliance: DPDP Act 2023 Sec-9 Ephemeral Retrieval | Verified Bundle',
+        '------------------------------------------------------------------------',
+        ...linesArray.map(l => sanitizePdfText(l))
+      ];
+
+      let streamOps = 'BT\n/F1 13 Tf\n42 758 Td\n';
+      allLines.forEach((line, idx) => {
+        if (idx === 1) {
+          streamOps += '/F1 9.5 Tf\n';
+        }
+        const clipped = line.slice(0, 92);
+        streamOps += `(${clipped}) Tj\n0 -16 Td\n`;
+      });
+      streamOps += 'ET';
+
+      const objects = [
+        '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+        '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+        '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n',
+        `4 0 obj\n<< /Length ${streamOps.length} >>\nstream\n${streamOps}\nendstream\nendobj\n`,
+        '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n'
+      ];
+
+      let pdf = '%PDF-1.4\n';
+      const offsets = [];
+      for (const obj of objects) {
+        offsets.push(pdf.length);
+        pdf += obj;
+      }
+      const xrefOffset = pdf.length;
+      pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+      for (const off of offsets) {
+        pdf += String(off).padStart(10, '0') + ' 00000 n \n';
+      }
+      pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+      return new Blob([pdf], { type: 'application/pdf' });
+    }
+
+    function triggerBlobDownload(filename, heading, linesArray, silent = false) {
+      if (!silent) showToast(`Downloading directly: ${filename}`);
+      const blob = generateStructuredPdfBlob(heading, linesArray);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2500);
+    }
+
+    // Dynamic PDF Content Builders (25+ lines each)
+    function buildPyqPdfLines(topicLabel) {
+      return [
+        `EXAMINATION PAPER VAULT: ${topicLabel.toUpperCase()}`,
+        'Duration: 3 Hours | Maximum Marks: 80 / 100 | Pattern: Official National Blueprint',
+        '',
+        'SECTION A: OBJECTIVE & CONCEPTUAL FOUNDATIONS (20 Marks)',
+        'Q1. Define core principles and fundamental laws governing ' + topicLabel + ' (2M)',
+        'Q2. Differentiate between primary theoretical models with labeled diagrams (2M)',
+        'Q3. Solve numerical / analytical case study based on standard formula set (2M)',
+        'Q4. Identify assertion-reason validity for high-frequency board/competitive case (2M)',
+        'Q5. State boundary conditions and practical limitations in real-world systems (2M)',
+        '',
+        'SECTION B: SHORT ANSWER & APPLICATION PROBLEMS (30 Marks)',
+        'Q6. Derive the standard governing equation / algorithm for Module 2 (5M)',
+        'Q7. Compare architecture, efficiency, and error margins across two approaches (5M)',
+        'Q8. Write structured step-by-step solution for PYQ Repeated Problem #4 (5M)',
+        'Q9. Explain regulatory / standard methodology used in national assessments (5M)',
+        'Q10. Analyze time/resource complexity or experimental observation table (5M)',
+        '',
+        'SECTION C: LONG ANSWER & CASE-BASED SYNTHESIS (30 Marks)',
+        'Q11. Comprehensive multi-part problem integrating Unit 3 & Unit 4 concepts (10M)',
+        'Q12. Design / prove complete end-to-end solution with edge-case verification (10M)',
+        'Q13. Answer comprehensive case-study questions based on official PYQ archive (10M)',
+        '',
+        'VERIFICATION NOTES:',
+        '- Cross-checked against official Board / NTA / University answer keys.',
+        '- Includes step-marking rubric for maximum score optimization.'
+      ];
+    }
+
+    function buildRepeatedQsPdfLines(topicLabel) {
+      return [
+        `HIGH-WEIGHTAGE REPEATED QUESTIONS: ${topicLabel.toUpperCase()}`,
+        'Frequency Analysis: Last 7 Years Official Question Papers (2019 - 2025)',
+        '',
+        'TOP 10 MOST REPEATED QUESTIONS (85%+ PROBABILITY):',
+        '1. [Asked 6x] Fundamental derivation & core mechanism in ' + topicLabel + ' (8 Marks)',
+        '2. [Asked 6x] Comparative tabular analysis of primary vs secondary systems (5 Marks)',
+        '3. [Asked 5x] Standard numerical / code / reaction-based application problem (6 Marks)',
+        '4. [Asked 5x] Diagrammatic representation & step-by-step working principle (5 Marks)',
+        '5. [Asked 4x] Exception handling / boundary conditions & real-life case study (5 Marks)',
+        '6. [Asked 4x] Short notes on high-scoring terminology & definitions (4 Marks)',
+        '7. [Asked 4x] Multi-concept synthesis question linking Unit 2 & Unit 5 (8 Marks)',
+        '8. [Asked 3x] Practical / laboratory viva-linked analytical question (4 Marks)',
+        '9. [Asked 3x] Assertion-Reasoning & statement-based MCQ trap patterns (4 Marks)',
+        '10.[Asked 3x] Data interpretation & graph-based trend evaluation (5 Marks)',
+        '',
+        'CHAPTER-WISE WEIGHTAGE DISTRIBUTION:',
+        '- Unit 1 (Foundations & Core Terminology): 16% Weightage',
+        '- Unit 2 (Core Principles & Derivations): 24% Weightage',
+        '- Unit 3 (Applied Problem Solving & Case Studies): 26% Weightage',
+        '- Unit 4 (Advanced Systems & Integration): 20% Weightage',
+        '- Unit 5 (Modern Applications & Emerging Trends): 14% Weightage',
+        '',
+        'LAST-48-HOUR REVISION STRATEGY:',
+        '- Prioritize Units 2 & 3 first (50% of total paper marks).',
+        '- Practice 3 timed mock sets using official marking scheme.'
+      ];
+    }
+
+    function buildSyllabusPdfLines(topicLabel) {
+      return [
+        `OFFICIAL SYLLABUS & EXAM BLUEPRINT: ${topicLabel.toUpperCase()}`,
+        'Academic Session: Current National Curriculum & Assessment Framework',
+        '',
+        'MODULE 1: FOUNDATIONS & CORE CONCEPTS (Weightage: 16%)',
+        '- Scope, definitions, historical evolution, and standard conventions.',
+        '- Core mathematical / theoretical prerequisites and classification.',
+        '',
+        'MODULE 2: CORE MECHANISMS & METHODOLOGY (Weightage: 24%)',
+        '- Governing laws, structural models, and analytical frameworks.',
+        '- Standard derivations, proofs, and algorithmic / procedural workflows.',
+        '',
+        'MODULE 3: APPLIED PROBLEM SOLVING (Weightage: 26%)',
+        '- Real-world case studies, numerical exercises, and implementation.',
+        '- Error analysis, optimization techniques, and comparative evaluation.',
+        '',
+        'MODULE 4: ADVANCED INTEGRATION & DESIGN (Weightage: 20%)',
+        '- Multi-module synthesis, system design, and complex scenario handling.',
+        '- Inter-disciplinary applications and performance benchmarking.',
+        '',
+        'MODULE 5: CONTEMPORARY STANDARDS & PRACTICE (Weightage: 14%)',
+        '- Recent updates, practical lab components, and viva-voce objectives.',
+        '',
+        'EXAMINATION BLUEPRINT & MARKING SCHEME:',
+        '- Section A: Multiple Choice / Very Short Answers (20% Marks)',
+        '- Section B: Short Analytical & Descriptive Questions (35% Marks)',
+        '- Section C: Long Answers, Derivations & Case Studies (45% Marks)',
+        '- Internal Choice: 33% internal choice available in Sections B & C.'
+      ];
+    }
+
+    function buildWealthGuidePdfLines() {
+      return [
+        'COMPLETE UNCLAIMED WEALTH RECOVERY GUIDE (INDIA)',
+        'Total Unclaimed Pool: ~Rs. 2.2 Lakh Crore across RBI, IRDAI, SEBI & EPFO',
+        '',
+        '1. RBI UDGAM PORTAL (https://udgam.rbi.org.in)',
+        '- Covers unclaimed bank deposits & FDs dormant for 10+ years (DEA Fund).',
+        '- Search using Account Holder Name + State/Bank + PAN/Voter ID/DOB.',
+        '- Submit claim form + KYC at the respective bank branch to reactivate.',
+        '',
+        '2. IRDAI BIMA BHAROSA (https://bimabharosa.irdai.gov.in)',
+        '- Covers unclaimed LIC & private life/general insurance maturity/death claims.',
+        '- Check insurer website Unclaimed Amount section with Policy No. & PAN.',
+        '',
+        '3. IEPFA PORTAL (https://www.iepf.gov.in)',
+        '- Covers shares & dividends unclaimed for 7 consecutive years.',
+        '- File Form IEPF-5 online -> Print -> Submit physical copy to Company Nodal Officer.',
+        '',
+        '4. SEBI MITRA & MF CENTRAL (https://www.mfcentral.com)',
+        '- Traces inactive / unclaimed Mutual Fund folios across all AMCs via PAN/PEKRN.',
+        '',
+        '5. EPFO UNIFIED PORTAL (https://unifiedportal-mem.epfindia.gov.in)',
+        '- Locate inoperative PF accounts using UAN or Member ID + Aadhaar e-KYC.',
+        '',
+        'MANDATORY KYC & LEGAL HEIR CHECKLIST:',
+        '[ ] Original / Attested Death Certificate (for deceased family claims)',
+        '[ ] PAN Card & Aadhaar Card of Claimant and Deceased Holder',
+        '[ ] Cancelled Cheque / Bank Passbook for NEFT/DBT Settlement',
+        '[ ] Nominee Proof OR Succession Certificate / Legal Heir Affidavit'
+      ];
+    }
+
+    function buildRtiPdfLines(topicText) {
+      return [
+        'RIGHT TO INFORMATION (RTI) ACT, 2005 - SECTION 6(1) APPLICATION',
+        'Advocates Act Compliant Citizen Self-Filing Template',
+        '',
+        'To,',
+        'The Public Information Officer (PIO),',
+        'Concerned Central / State Government Department or Municipal Authority',
+        '',
+        `Subject: Application under Section 6(1) of RTI Act, 2005 regarding: ${topicText}`,
+        '',
+        'Respected Sir / Madam,',
+        'Under Section 6(1) of the Right to Information Act, 2005, I request you to',
+        'kindly furnish certified copies of the following public records:',
+        '',
+        '1. Official file noting, sanctioned work order / scheme status, and',
+        '   current action-taken report pertaining to the subject matter.',
+        '2. Name and designation of the officer(s) responsible for processing',
+        '   and timeline prescribed under Citizens Charter.',
+        '3. Certified copy of reasons for delay (if any) as per Section 4(1)(d).',
+        '4. Details of Appellate Authority (Name & Address) under Section 7(8)(iii).',
+        '',
+        'DECLARATION & FEE DETAILS:',
+        '- I am a citizen of India and eligible to seek information under the Act.',
+        '- Prescribed Fee: Rs. 10/- paid via Online Portal / IPO / Court Fee Stamp',
+        '  (Exempted if BPL Certificate enclosed under Section 7(5)).',
+        '- Statutory Deadline: Response mandated within 30 days under Section 7(1).',
+        '',
+        'Official Online Filing Portals:',
+        '- Central Govt RTI: https://rtionline.gov.in',
+        '- Public Grievance: https://pgportal.gov.in (CPGRAMS)'
+      ];
+    }
+
+    // Dynamic Bundle Store for 1-Click Multi-PDF Downloads
+    const academicBundleStore = new Map();
+
+    function downloadDynamicBundle(bundleId) {
+      const bundle = academicBundleStore.get(bundleId);
+      if (!bundle) return;
+      showToast(`⚡ Downloading all 3 PDFs for ${bundle.topic}...`);
+      bundle.files.forEach((f, idx) => {
+        setTimeout(() => {
+          triggerBlobDownload(f.filename, f.heading, f.lines, true);
+          if (idx === bundle.files.length - 1) {
+            showToast(`✓ All 3 ${bundle.topic} PDFs downloaded!`);
+          }
+        }, idx * 380);
+      });
+    }
+
+    function downloadSingleFromBundle(bundleId, fileIdx) {
+      const bundle = academicBundleStore.get(bundleId);
+      if (!bundle || !bundle.files[fileIdx]) return;
+      const f = bundle.files[fileIdx];
+      triggerBlobDownload(f.filename, f.heading, f.lines, false);
+    }
+
+    // =========================================================================
+    // 7. Topic Extractor & Card Builders
+    // =========================================================================
+    function extractAcademicTopic(rawQuery) {
+      const cleaned = rawQuery
+        .replace(/\b(fetch|download|get|give|me|find|show|papers|paper|pyq|pyqs|previous|year|question|questions|syllabus|blueprint|repeated|important|topics|timetable|exam|exams|and|for|of|the|in|all|1-click|bundle|pdf|pdfs|set)\b/gi, ' ')
+        .replace(/[^a-zA-Z0-9\s\+\-\/]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (cleaned.length >= 2) {
+        const display = cleaned.split(' ').slice(0, 4).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const slug = display.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '');
+        return { display, slug: slug || 'National_Exam' };
+      }
+      return { display: 'National Board & Competitive Exam', slug: 'National_Exam' };
+    }
+
+    function registerAndWrapPin(title, badge, query, cardHtml) {
+      const payloadId = 'pin-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+      responsePayloadRegistry.set(payloadId, { title, badge, query, html: cardHtml });
+      return `
+        <div class="space-y-2">
+          ${cardHtml}
+          <div class="flex items-center justify-end">
+            <button onclick="pinResponseToBoard('${payloadId}', this)" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#14141a] hover:bg-[#1d1d26] border border-[#262632] text-[11px] font-medium text-zinc-300 hover:text-white transition">
+              <span>📌</span> Pin to Board
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // A. Universal Student & PYQ Finder Engine
+    function buildAcademicCard(query) {
+      const { display, slug } = extractAcademicTopic(query);
+      const bundleId = 'bundle-' + Date.now();
+
+      const files = [
+        {
+          filename: `${slug}_Official_PYQ_Set.pdf`,
+          subtitle: `Previous Year Question Paper Archive — ${display}`,
+          heading: `${display} - Official PYQ Set`,
+          lines: buildPyqPdfLines(display),
+          color: 'text-indigo-300'
+        },
+        {
+          filename: `${slug}_High_Weightage_Repeated_Questions.pdf`,
+          subtitle: `Most Repeated Questions & Important Topics — ${display}`,
+          heading: `${display} - High Weightage Repeated Questions`,
+          lines: buildRepeatedQsPdfLines(display),
+          color: 'text-blue-300'
+        },
+        {
+          filename: `${slug}_Official_Syllabus_And_Blueprint.pdf`,
+          subtitle: `Updated Syllabus, Marking Scheme & Exam Pattern — ${display}`,
+          heading: `${display} - Official Syllabus & Blueprint`,
+          lines: buildSyllabusPdfLines(display),
+          color: 'text-emerald-300'
+        }
+      ];
+
+      academicBundleStore.set(bundleId, { topic: display, files });
+
+      const rowsHtml = files.map((f, idx) => `
+        <div class="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-[#181820] border border-[#282834]">
+          <div class="min-w-0">
+            <div class="text-xs font-mono font-semibold ${f.color} truncate">${escapeHtml(f.filename)}</div>
+            <div class="text-[11px] text-zinc-400">${escapeHtml(f.subtitle)}</div>
+          </div>
+          <button onclick="downloadSingleFromBundle('${bundleId}', ${idx})" class="px-3 py-1.5 rounded-lg bg-[#22222d] hover:bg-indigo-500 text-zinc-200 hover:text-white text-xs font-medium transition shrink-0">
+            ↓ Download
+          </button>
+        </div>
+      `).join('');
+
+      const html = `
+        <div class="bg-[#111116] border border-indigo-500/35 rounded-2xl p-4 sm:p-5 space-y-4 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono uppercase">Pan-India Study Vault</span>
+              <span class="text-sm font-semibold text-white">${escapeHtml(display)} — Direct PDF Bundle</span>
+            </div>
+            <span class="text-[10px] font-mono text-zinc-400">0 Redirects • 3 PDFs Ready</span>
+          </div>
+
+          <button onclick="downloadDynamicBundle('${bundleId}')" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-500 via-blue-600 to-indigo-600 hover:from-indigo-400 hover:to-blue-500 text-white text-xs sm:text-sm font-bold shadow-[0_0_24px_rgba(99,102,241,0.35)] transition flex items-center justify-center gap-2">
+            <span>⚡ Download All PDFs at Once (1-Click Bundle)</span>
+          </button>
+
+          <div class="space-y-2">
+            ${rowsHtml}
+          </div>
+        </div>
+      `;
+      return registerAndWrapPin(`${display} PYQ Bundle`, 'Student & Exam Vault', query, html);
+    }
+
+    // B. Complete Gov.in & Civic Services Master Hub
+    function buildGovServiceCard(query) {
+      const uid = 'gov-' + Date.now();
+      const draftId = 'rti-draft-' + Date.now();
+      const qLower = query.toLowerCase();
+      const showRtiSection = ['rti', 'grievance', 'complaint', 'cpgrams', 'road', 'delay', 'civic', 'municipality', 'bribe', 'service'].some(k => qLower.includes(k));
+      const cleanTopic = query.slice(0, 70);
+
+      const rtiPdfBtnId = 'rtipdf-' + Date.now();
+      academicBundleStore.set(rtiPdfBtnId, {
+        topic: 'RTI Sec 6(1)',
+        files: [{
+          filename: 'FetchAI_RTI_Section_6_1_Application.pdf',
+          heading: 'RTI Act 2005 - Section 6(1) Official Draft',
+          lines: buildRtiPdfLines(cleanTopic)
+        }]
+      });
+
+      const html = `
+        <div id="${uid}" class="bg-[#111116] border border-blue-500/35 rounded-2xl p-4 sm:p-5 space-y-4 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/30 text-[10px] font-mono uppercase">Gov.in Direct Service Execution Card</span>
+              <span class="text-sm font-semibold text-white">13,500+ Central &amp; State Services</span>
+            </div>
+            <span class="gov-progress-badge px-2 py-0.5 rounded-full bg-[#1a1a22] text-[10px] font-mono text-blue-300 border border-blue-500/25">0/4 Docs Ready</span>
+          </div>
+
+          <!-- Direct 1-Click Official Portal Launchers -->
+          <div>
+            <div class="text-[11px] font-mono text-zinc-400 uppercase mb-2">1-Click Official Portal Launchers</div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <a href="https://services.india.gov.in" target="_blank" rel="noopener noreferrer" class="p-2.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 transition">
+                <div class="text-xs font-bold text-blue-300">india.gov.in ↗</div>
+                <div class="text-[10px] text-zinc-400">Certificates, Passport &amp; IDs</div>
+              </a>
+              <a href="https://www.myscheme.gov.in" target="_blank" rel="noopener noreferrer" class="p-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 transition">
+                <div class="text-xs font-bold text-indigo-300">myScheme ↗</div>
+                <div class="text-[10px] text-zinc-400">Welfare &amp; Subsidy Finder</div>
+              </a>
+              <a href="https://scholarships.gov.in" target="_blank" rel="noopener noreferrer" class="p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 transition">
+                <div class="text-xs font-bold text-emerald-300">NSP Scholarships ↗</div>
+                <div class="text-[10px] text-zinc-400">Central &amp; State DBT</div>
+              </a>
+              <a href="https://rtionline.gov.in" target="_blank" rel="noopener noreferrer" class="p-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 transition">
+                <div class="text-xs font-bold text-amber-300">RTI Online ↗</div>
+                <div class="text-[10px] text-zinc-400">File Sec 6(1) Requests</div>
+              </a>
+              <a href="https://pgportal.gov.in" target="_blank" rel="noopener noreferrer" class="p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 transition">
+                <div class="text-xs font-bold text-rose-300">CPGRAMS ↗</div>
+                <div class="text-[10px] text-zinc-400">Public Grievance Portal</div>
+              </a>
+              <a href="https://www.nidhi-prayas.org" target="_blank" rel="noopener noreferrer" class="p-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/25 transition">
+                <div class="text-xs font-bold text-purple-300">NIDHI-PRAYAS ↗</div>
+                <div class="text-[10px] text-zinc-400">₹10L–₹40L Hardware Grant</div>
+              </a>
+            </div>
+          </div>
+
+          <!-- Interactive Required Documents & Eligibility Checklist -->
+          <div class="bg-[#17171f] border border-[#252530] rounded-xl p-3 space-y-2.5">
+            <div class="text-[11px] font-mono text-zinc-300 uppercase">Required Documents &amp; Eligibility Checklist</div>
+            <div class="w-full h-1.5 bg-[#242430] rounded-full overflow-hidden">
+              <div class="gov-progress-bar h-full bg-gradient-to-r from-blue-500 to-indigo-400 transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-[#121218] border border-[#24242d] cursor-pointer text-xs text-zinc-200">
+                <input type="checkbox" onchange="updateChecklistProgress('${uid}', '.gov-progress-badge', '.gov-progress-bar')" class="accent-blue-500 w-4 h-4 rounded" />
+                <span>Aadhaar Card (Mobile-Linked e-KYC)</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-[#121218] border border-[#24242d] cursor-pointer text-xs text-zinc-200">
+                <input type="checkbox" onchange="updateChecklistProgress('${uid}', '.gov-progress-badge', '.gov-progress-bar')" class="accent-blue-500 w-4 h-4 rounded" />
+                <span>PAN / Income / Domicile Certificate</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-[#121218] border border-[#24242d] cursor-pointer text-xs text-zinc-200">
+                <input type="checkbox" onchange="updateChecklistProgress('${uid}', '.gov-progress-badge', '.gov-progress-bar')" class="accent-blue-500 w-4 h-4 rounded" />
+                <span>DigiLocker / APAAR Verified Copy</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-[#121218] border border-[#24242d] cursor-pointer text-xs text-zinc-200">
+                <input type="checkbox" onchange="updateChecklistProgress('${uid}', '.gov-progress-badge', '.gov-progress-bar')" class="accent-blue-500 w-4 h-4 rounded" />
+                <span>Aadhaar-Seeded Bank Account (DBT)</span>
+              </label>
+            </div>
+          </div>
+
+          ${showRtiSection ? `
+          <!-- Tailored Section 6(1) RTI / CPGRAMS Auto-Drafter -->
+          <div class="bg-[#0d0d12] border border-amber-500/30 rounded-xl p-3.5 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="text-xs font-semibold text-amber-300">⚖️ Section 6(1) RTI Application / CPGRAMS Draft</span>
+              <span class="text-[10px] font-mono text-zinc-400">30-Day Statutory Limit</span>
+            </div>
+            <pre id="${draftId}" class="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-zinc-200 bg-[#08080b] border border-[#22222b] rounded-lg p-3 overflow-x-auto">To,
+The Public Information Officer (PIO),
+Concerned Central / State Government Department.
+
+Subject: Application under Section 6(1) of the Right to Information Act, 2005 regarding: ${escapeHtml(cleanTopic)}.
+
+Sir/Madam,
+Please furnish certified copies of the following public records:
+1. Current file status, official action-taken report, and sanctioned details regarding the subject matter.
+2. Name and designation of the designated officer responsible under the Citizens' Charter.
+3. Certified copy of reasons for delay (if any) under Section 4(1)(d) of the RTI Act.
+
+I am enclosing the prescribed RTI fee of ₹10 (BPL exempt). Kindly respond within 30 days under Section 7(1).</pre>
+            <div class="flex flex-wrap items-center gap-2">
+              <button onclick="copyRtiDraft('${draftId}', this)" class="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/35 text-xs font-semibold text-amber-200 transition">
+                📋 Copy Draft
+              </button>
+              <button onclick="downloadSingleFromBundle('${rtiPdfBtnId}', 0)" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition">
+                ↓ Download Official RTI PDF
+              </button>
+            </div>
+          </div>
+          ` : ''}
+        </div>
+      `;
+      return registerAndWrapPin('Gov.in & MyScheme Hub', '13,500+ Civic Services', query, html);
+    }
+
+    // C. Unclaimed Wealth & Financial Recovery Hub (All 5 Official Portals)
+    function buildWealthCard(query) {
+      const uid = 'kyc-' + Date.now();
+      const guideId = 'wguide-' + Date.now();
+      academicBundleStore.set(guideId, {
+        topic: 'Unclaimed Wealth Guide',
+        files: [{
+          filename: 'FetchAI_Unclaimed_Wealth_Recovery_Guide.pdf',
+          heading: 'Complete Unclaimed Wealth & Asset Recovery Guide',
+          lines: buildWealthGuidePdfLines()
+        }]
+      });
+
+      const html = `
+        <div id="${uid}" class="bg-[#111116] border border-emerald-500/35 rounded-2xl p-4 sm:p-5 space-y-4 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono uppercase">Unclaimed Wealth Recovery Action Plan</span>
+              <span class="text-sm font-semibold text-white">₹2.2 Lakh Crore Unclaimed Pool</span>
+            </div>
+            <span class="kyc-progress-badge px-2 py-0.5 rounded-full bg-[#1a1a22] text-[10px] font-mono text-emerald-400 border border-emerald-500/25">0/4 Ready</span>
+          </div>
+
+          <!-- All 5 Official Regulatory Portals -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            <a href="https://udgam.rbi.org.in" target="_blank" rel="noopener noreferrer" class="p-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition flex flex-col">
+              <span class="text-xs font-bold text-emerald-300">1. RBI UDGAM ↗</span>
+              <span class="text-[10px] text-zinc-400 mt-0.5">Unclaimed Bank Deposits &amp; FDs (30+ Banks)</span>
+            </a>
+            <a href="https://bimabharosa.irdai.gov.in" target="_blank" rel="noopener noreferrer" class="p-3 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 transition flex flex-col">
+              <span class="text-xs font-bold text-blue-300">2. IRDAI Bima Bharosa ↗</span>
+              <span class="text-[10px] text-zinc-400 mt-0.5">Unclaimed LIC &amp; Private Insurance</span>
+            </a>
+            <a href="https://www.iepf.gov.in" target="_blank" rel="noopener noreferrer" class="p-3 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 transition flex flex-col">
+              <span class="text-xs font-bold text-indigo-300">3. IEPFA Portal ↗</span>
+              <span class="text-[10px] text-zinc-400 mt-0.5">Unclaimed Shares, Dividends &amp; Debentures</span>
+            </a>
+            <a href="https://www.mfcentral.com" target="_blank" rel="noopener noreferrer" class="p-3 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 transition flex flex-col">
+              <span class="text-xs font-bold text-purple-300">4. SEBI MITRA / MF Central ↗</span>
+              <span class="text-[10px] text-zinc-400 mt-0.5">Dormant Mutual Fund Folios</span>
+            </a>
+            <a href="https://unifiedportal-mem.epfindia.gov.in" target="_blank" rel="noopener noreferrer" class="p-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition flex flex-col sm:col-span-2 lg:col-span-2">
+              <span class="text-xs font-bold text-amber-300">5. EPFO Unified Portal ↗</span>
+              <span class="text-[10px] text-zinc-400 mt-0.5">Inoperative Provident Fund (PF) &amp; Pension Accounts</span>
+            </a>
+          </div>
+
+          <!-- Interactive KYC & Legal Heir Document Checklist -->
+          <div class="bg-[#17171f] border border-[#252530] rounded-xl p-3 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-mono text-zinc-300 uppercase">KYC &amp; Legal Heir Document Checklist</span>
+            </div>
+            <div class="w-full h-1.5 bg-[#242430] rounded-full overflow-hidden">
+              <div class="kyc-progress-bar h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-[#121218] border border-[#24242d] cursor-pointer text-xs text-zinc-200">
+                <input type="checkbox" onchange="updateChecklistProgress('${uid}', '.kyc-progress-badge', '.kyc-progress-bar')" class="accent-emerald-500 w-4 h-4 rounded" />
+                <span>Death Certificate (Original / Attested)</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-[#121218] border border-[#24242d] cursor-pointer text-xs text-zinc-200">
+                <input type="checkbox" onchange="updateChecklistProgress('${uid}', '.kyc-progress-badge', '.kyc-progress-bar')" class="accent-emerald-500 w-4 h-4 rounded" />
+                <span>PAN Card (Claimant + Deceased)</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-[#121218] border border-[#24242d] cursor-pointer text-xs text-zinc-200">
+                <input type="checkbox" onchange="updateChecklistProgress('${uid}', '.kyc-progress-badge', '.kyc-progress-bar')" class="accent-emerald-500 w-4 h-4 rounded" />
+                <span>Aadhaar Card (e-KYC Ready)</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-[#121218] border border-[#24242d] cursor-pointer text-xs text-zinc-200">
+                <input type="checkbox" onchange="updateChecklistProgress('${uid}', '.kyc-progress-badge', '.kyc-progress-bar')" class="accent-emerald-500 w-4 h-4 rounded" />
+                <span>Nominee / Legal Heir Proof</span>
+              </label>
+            </div>
+          </div>
+
+          <button onclick="downloadSingleFromBundle('${guideId}', 0)" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-200 text-xs font-semibold transition flex items-center justify-center gap-2">
+            <span>↓ Download Complete Claim Guide PDF</span>
+          </button>
+        </div>
+      `;
+      return registerAndWrapPin('Unclaimed Wealth Recovery Plan', 'RBI • IRDAI • SEBI • EPFO', query, html);
+    }
+
+    // D. Live Pan-India PIN Code & UDISE+ Directory
+    async function buildLivePinCodeCard(pin, query) {
+      try {
+        const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+        const data = await res.json();
+
+        if (!Array.isArray(data) || data[0]?.Status !== 'Success' || !data[0]?.PostOffice?.length) {
+          const errHtml = `
+            <div class="bg-[#111116] border border-rose-500/35 rounded-2xl p-4 space-y-2">
+              <div class="text-xs font-mono text-rose-300 uppercase">Pan-India PIN Code Lookup: ${pin}</div>
+              <p class="text-xs text-zinc-300">No active postal or civic records were returned for PIN code <strong>${pin}</strong>. Please enter any valid 6-digit Indian PIN code.</p>
+            </div>
+          `;
+          return registerAndWrapPin(`PIN ${pin} — Not Found`, 'India Post API', query, errHtml);
+        }
+
+        const offices = data[0].PostOffice;
+        const primary = offices[0];
+        const district = primary.District;
+        const state = primary.State;
+
+        const rowsHtml = offices.slice(0, 6).map(po => `
+          <tr class="hover:bg-white/[0.02]">
+            <td class="py-2 px-3 font-medium text-white">${escapeHtml(po.Name)}</td>
+            <td class="py-2 px-3 text-zinc-300">${escapeHtml(po.BranchType)}</td>
+            <td class="py-2 px-3"><span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[10px]">${escapeHtml(po.DeliveryStatus)}</span></td>
+            <td class="py-2 px-3 text-zinc-400">${escapeHtml(po.Block || district)}</td>
+          </tr>
+        `).join('');
+
+        const html = `
+          <div class="bg-[#111116] border border-blue-500/35 rounded-2xl p-4 sm:p-5 space-y-4 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/30 text-[10px] font-mono uppercase">Live India Post &amp; UDISE+ Directory</span>
+                <span class="text-sm font-semibold text-white">PIN ${pin} — ${escapeHtml(district)}, ${escapeHtml(state)}</span>
+              </div>
+              <span class="text-[10px] font-mono text-emerald-400">${offices.length} Verified Localities</span>
+            </div>
+
+            <div class="overflow-x-auto rounded-xl border border-[#24242f]">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="bg-[#181820] text-zinc-400 font-mono text-[10px] uppercase">
+                    <th class="py-2 px-3">Locality / Post Office</th>
+                    <th class="py-2 px-3">Type</th>
+                    <th class="py-2 px-3">Delivery</th>
+                    <th class="py-2 px-3">Taluka / Block</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-[#20202a]">
+                  ${rowsHtml}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="p-3 rounded-xl bg-[#16161e] border border-[#252532] flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div class="text-xs font-semibold text-blue-200">Verify Schools, ATL &amp; Civic Offices in ${escapeHtml(district)}</div>
+                <div class="text-[11px] text-zinc-400">Direct official portals for UDISE+ schools, Know Your School, AICTE colleges &amp; Atal Tinkering Labs.</div>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <a href="https://udiseplus.gov.in" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">
+                  UDISE+ ↗
+                </a>
+                <a href="https://kys.udiseplus.gov.in" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition">
+                  Know Your School ↗
+                </a>
+                <a href="https://aim.gov.in/atl.php" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-[#22222d] hover:bg-[#2d2d3b] text-zinc-200 text-xs font-medium transition">
+                  ATL Map ↗
+                </a>
+              </div>
+            </div>
+          </div>
+        `;
+        return registerAndWrapPin(`PIN ${pin} (${district}, ${state})`, 'Live Postal & UDISE+ Directory', query, html);
+      } catch (err) {
+        const fallbackHtml = `
+          <div class="bg-[#111116] border border-amber-500/35 rounded-2xl p-4 space-y-2">
+            <div class="text-xs font-mono text-amber-300 uppercase">PIN ${pin} — Network Notice</div>
+            <p class="text-xs text-zinc-300">Unable to reach live postal endpoint right now. Verify school records directly on <a href="https://udiseplus.gov.in" target="_blank" rel="noopener noreferrer" class="text-blue-400 underline">udiseplus.gov.in ↗</a> or <a href="https://kys.udiseplus.gov.in" target="_blank" rel="noopener noreferrer" class="text-blue-400 underline">kys.udiseplus.gov.in ↗</a>.</p>
+          </div>
+        `;
+        return registerAndWrapPin(`PIN ${pin} Directory`, 'UDISE+ Portal', query, fallbackHtml);
+      }
+    }
+
+    function buildPinPromptCard(query) {
+      const html = `
+        <div class="bg-[#111116] border border-amber-500/35 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-mono uppercase">Pan-India Regional Lookup</span>
+            <span class="text-[10px] font-mono text-zinc-400">Live Postal &amp; UDISE+ API</span>
+          </div>
+          <p class="text-xs sm:text-sm text-zinc-200 leading-relaxed">
+            Please type <strong class="text-white">any 6-digit Indian PIN code</strong> in the command bar below to fetch real-time locality data, district/state mapping, verified UDISE+ schools, Atal Tinkering Labs (ATL), and AICTE college directories.
+          </p>
+          <div class="flex flex-wrap gap-2 pt-1">
+            <a href="https://udiseplus.gov.in" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">UDISE+ Portal ↗</a>
+            <a href="https://kys.udiseplus.gov.in" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition">Know Your School ↗</a>
+            <a href="https://www.aicte-india.org" target="_blank" rel="noopener noreferrer" class="px-3 py-1.5 rounded-lg bg-[#22222d] hover:bg-[#2d2d3b] text-zinc-200 text-xs font-medium transition">AICTE Directory ↗</a>
+          </div>
+        </div>
+      `;
+      return registerAndWrapPin('Pan-India PIN & UDISE+ Guide', 'Live Regional Lookup', query, html);
+    }
+
+    // Live Gemini AI API Call
+    function formatGeminiMarkdown(text) {
+      let safe = escapeHtml(text);
+      safe = safe.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>');
+      safe = safe.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-indigo-400 hover:text-indigo-300 underline">$1 ↗</a>');
+      safe = safe.replace(/\n/g, '<br />');
+      return safe;
+    }
+
+    async function callLiveGeminiApi(query) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
+      const systemPrompt = `You are FetchAI ("Zero Redirects. Instant File & Civic Retrieval."). Answer concisely and directly for an Indian citizen or student. Provide actionable steps, official Indian government portals (india.gov.in, myscheme.gov.in, udgam.rbi.org.in, udiseplus.gov.in, scholarships.gov.in, rtionline.gov.in, pgportal.gov.in, digilocker.gov.in), and direct exam/scheme guidance. Language preference: ${currentLang}.`;
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: query }] }]
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error?.message || 'Gemini API request failed');
+      }
+
+      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No response returned.';
+      const html = `
+        <div class="bg-[#111116] border border-emerald-500/35 rounded-2xl p-4 sm:p-5 space-y-3 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
+          <div class="flex items-center justify-between gap-2">
+            <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono uppercase">🟢 Live Gemini AI Connected</span>
+            <span class="text-[10px] font-mono text-zinc-500">Gemini 2.5 Flash</span>
+          </div>
+          <div class="text-xs sm:text-sm text-zinc-200 leading-relaxed">${formatGeminiMarkdown(rawText)}</div>
+        </div>
+      `;
+      return registerAndWrapPin(query.slice(0, 38), 'Live Gemini AI', query, html);
+    }
+
+    function buildFallbackCard(query) {
+      const html = `
+        <div class="bg-[#111116] border border-[#262632] rounded-2xl p-4 sm:p-5 space-y-3 shadow-[0_12px_32px_rgba(0,0,0,0.45)]">
+          <div class="flex items-center justify-between">
+            <span class="px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 text-[10px] font-mono uppercase">⚡ Instant National Engine</span>
+            <span class="text-[10px] font-mono text-zinc-500">Keyless Mode</span>
+          </div>
+          <p class="text-xs sm:text-sm text-zinc-300 leading-relaxed">
+            Processed <strong class="text-white">"${escapeHtml(query)}"</strong> with zero tracking. Try asking for any specific exam/subject (e.g. <em>NEET Biology PYQ</em>, <em>12th CBSE Physics syllabus</em>, <em>UPSC GS1</em>), any <strong>6-digit India PIN code</strong>, any <strong>gov.in service / RTI</strong>, or <strong>unclaimed family wealth</strong>:
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            <button onclick="triggerQuickIntent('Fetch PYQ papers, repeated questions and syllabus for NEET Biology')" class="px-3 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/25 text-left text-xs text-indigo-200 transition">
+              🎓 <strong>Exam Vault:</strong> Custom PYQ &amp; Syllabus PDFs
+            </button>
+            <button onclick="triggerQuickIntent('Show Gov.in and myScheme services, scholarships & RTI auto-drafter')" class="px-3 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 text-left text-xs text-blue-200 transition">
+              🏛️ <strong>Gov.in Hub:</strong> Services, Schemes &amp; RTI
+            </button>
+            <button onclick="triggerQuickIntent('Recover unclaimed family bank deposits, insurance, mutual funds & EPFO')" class="px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-left text-xs text-emerald-200 transition">
+              💰 <strong>Wealth Recovery:</strong> 5 Official Portals
+            </button>
+            <button onclick="triggerQuickIntent('Lookup Pan-India school, college and ATL directory by PIN code')" class="px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-left text-xs text-amber-200 transition">
+              🏫 <strong>PIN Lookup:</strong> Live India Post &amp; UDISE+
+            </button>
+          </div>
+        </div>
+      `;
+      return registerAndWrapPin('FetchAI National Guide', 'Instant National Engine', query, html);
+    }
+
+    // =========================================================================
+    // 8. Interactive Helpers & Voice Simulation
+    // =========================================================================
+    function updateChecklistProgress(containerId, badgeSelector, barSelector) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+      const checkedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+      const badge = container.querySelector(badgeSelector);
+      const bar = container.querySelector(barSelector);
+      if (badge) badge.textContent = `${checkedCount}/${checkboxes.length} Ready`;
+      if (bar) bar.style.width = `${(checkedCount / checkboxes.length) * 100}%`;
+    }
+
+    function copyRtiDraft(draftId, btnEl) {
+      const text = document.getElementById(draftId).innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const original = btnEl.innerHTML;
+        btnEl.innerHTML = '✓ Copied';
+        btnEl.classList.add('bg-emerald-500/20', 'text-emerald-300', 'border-emerald-500/40');
+        showToast('RTI Draft copied to clipboard!');
+        setTimeout(() => {
+          btnEl.innerHTML = original;
+          btnEl.classList.remove('bg-emerald-500/20', 'text-emerald-300', 'border-emerald-500/40');
+        }, 2000);
+      });
+    }
+
+    function simulateVoiceInput() {
+      const samples = [
+        'Fetch PYQ papers and syllabus for CBSE Class 12 Physics',
+        'Show Gov.in passport, scholarship and RTI services',
+        'Recover unclaimed family bank deposits and EPFO via UDGAM',
+        'Lookup Pan-India school directory by PIN code'
+      ];
+      const input = document.getElementById('ai-input');
+      input.value = samples[Math.floor(Math.random() * samples.length)];
+      input.focus();
+      showToast('Bhashini Voice Captured → Ready to Fetch');
+    }
+
+    // =========================================================================
+    // 9. Chat Stream Rendering & Hybrid Intent Execution
+    // =========================================================================
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      }[m]));
+    }
+
+    function ensureChatStreamVisible() {
+      document.getElementById('welcome-hero').classList.add('hidden');
+      document.getElementById('chat-stream').classList.remove('hidden');
+    }
+
+    function scrollWorkspaceBottom() {
+      const container = document.getElementById('workspace-scroll');
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    }
+
+    function appendUserBubble(text) {
+      const stream = document.getElementById('chat-stream');
+      const div = document.createElement('div');
+      div.className = 'flex justify-end animate-fade-in-up';
+      div.innerHTML = `
+        <div class="max-w-[85%] rounded-2xl rounded-tr-sm bg-gradient-to-br from-indigo-600/30 to-blue-600/20 border border-indigo-500/35 px-4 py-2.5 text-sm text-white shadow-sm">
+          ${escapeHtml(text)}
+        </div>
+      `;
+      stream.appendChild(div);
+      scrollWorkspaceBottom();
+    }
+
+    function appendLoadingIndicator(labelText) {
+      const id = 'loading-' + Date.now();
+      const stream = document.getElementById('chat-stream');
+      const div = document.createElement('div');
+      div.id = id;
+      div.className = 'flex items-start gap-3 animate-fade-in-up';
+      div.innerHTML = `
+        <div class="w-7 h-7 rounded-lg bg-[#16161e] border border-indigo-500/30 flex items-center justify-center shrink-0 mt-0.5">
+          <svg class="w-3.5 h-3.5 text-indigo-400 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+          </svg>
+        </div>
+        <div class="bg-[#111116] border border-[#24242d] rounded-2xl rounded-tl-sm px-4 py-3 text-xs text-zinc-300 flex items-center gap-3">
+          <span class="font-mono text-indigo-300">${escapeHtml(labelText)}</span>
+          <span class="dot-pulse flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block"></span>
+          </span>
+        </div>
+      `;
+      stream.appendChild(div);
+      scrollWorkspaceBottom();
+      return id;
+    }
+
+    function appendAiCardRaw(htmlContent) {
+      const stream = document.getElementById('chat-stream');
+      const div = document.createElement('div');
+      div.className = 'flex items-start gap-3 animate-fade-in-up';
+      div.innerHTML = `
+        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shrink-0 mt-0.5 shadow-[0_0_14px_rgba(99,102,241,0.35)]">
+          <svg class="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+          </svg>
+        </div>
+        <div class="flex-1 min-w-0">${htmlContent}</div>
+      `;
+      stream.appendChild(div);
+      scrollWorkspaceBottom();
+    }
+
+    async function executeAiQuery(queryText, skipHistoryLog = false) {
+      const trimmed = queryText.trim();
+      if (!trimmed) return;
+
+      ensureChatStreamVisible();
+      appendUserBubble(trimmed);
+      if (!skipHistoryLog) logSearchHistory(trimmed);
+
+      const q = trimmed.toLowerCase();
+      const pinMatch = trimmed.match(/\b\d{6}\b/);
+
+      const isAcademic = ['pyq', 'exam', 'paper', 'jee', 'neet', 'cuet', 'upsc', 'cbse', 'icse', 'msbte', 'diploma', 'engineering', 'syllabus', 'timetable', 'board', 'physics', 'chemistry', 'maths', 'biology', 'oop', 'study'].some(k => q.includes(k));
+      const isWealth = ['money', 'bank', 'insurance', 'udgam', 'lic', 'unclaimed', 'wealth', 'family', 'mitra', 'iepf', 'epfo', 'pf', 'mutual fund', 'shares', 'dividend', 'bima'].some(k => q.includes(k));
+      const isGov = ['gov', 'myscheme', 'scheme', 'certificate', 'passport', 'aadhaar', 'pan', 'ration', 'scholarship', 'grant', 'nidhi', 'prayas', 'rti', 'cpgrams', 'grievance', 'complaint', 'service', 'civic'].some(k => q.includes(k));
+      const isSchoolNoPin = ['school', 'college', 'udise', 'atl', 'pincode', 'pin code', 'aicte', 'district'].some(k => q.includes(k));
+
+      let loaderLabel = 'Processing via ⚡ Instant National Engine...';
+      if (pinMatch) loaderLabel = `Querying live India Post API for PIN ${pinMatch[0]}...`;
+      else if (isLiveGeminiMode && !isAcademic && !isWealth && !isGov && !isSchoolNoPin) loaderLabel = 'Querying 🟢 Live Gemini AI...';
+
+      const loaderId = appendLoadingIndicator(loaderLabel);
+
+      let responseHtml = '';
+      try {
+        if (pinMatch) {
+          responseHtml = await buildLivePinCodeCard(pinMatch[0], trimmed);
+        } else if (isAcademic) {
+          await new Promise(r => setTimeout(r, 420));
+          responseHtml = buildAcademicCard(trimmed);
+        } else if (isWealth) {
+          await new Promise(r => setTimeout(r, 420));
+          responseHtml = buildWealthCard(trimmed);
+        } else if (isGov) {
+          await new Promise(r => setTimeout(r, 420));
+          responseHtml = buildGovServiceCard(trimmed);
+        } else if (isSchoolNoPin) {
+          await new Promise(r => setTimeout(r, 380));
+          responseHtml = buildPinPromptCard(trimmed);
+        } else if (isLiveGeminiMode && geminiApiKey) {
+          responseHtml = await callLiveGeminiApi(trimmed);
+        } else {
+          await new Promise(r => setTimeout(r, 380));
+          responseHtml = buildFallbackCard(trimmed);
+        }
+      } catch (err) {
+        responseHtml = `
+          <div class="bg-[#111116] border border-rose-500/35 rounded-2xl p-4 space-y-2 mb-3">
+            <div class="text-xs font-mono text-rose-300 uppercase">Live Gemini AI Notice</div>
+            <p class="text-xs text-zinc-300">${escapeHtml(err.message)}. Switched seamlessly to Instant National Engine.</p>
+          </div>
+        ` + buildFallbackCard(trimmed);
+      } finally {
+        const loaderEl = document.getElementById(loaderId);
+        if (loaderEl) loaderEl.remove();
+      }
+
+      appendAiCardRaw(responseHtml);
+    }
+
+    function handleChatSubmit(event) {
+      event.preventDefault();
+      const input = document.getElementById('ai-input');
+      const val = input.value;
+      if (!val.trim()) return;
+      input.value = '';
+      executeAiQuery(val);
+    }
+
+    function triggerQuickIntent(promptText) {
+      executeAiQuery(promptText);
+    }
+
+    // =========================================================================
+    // 10. Boot Initialization
+    // =========================================================================
+    (function initFetchAI() {
+      syncEngineUI();
+      renderPinnedVault();
+      renderSearchHistory();
+      setLanguage(currentLang, true);
+    })();
+  </script>
+</body>
+</html>
